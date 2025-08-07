@@ -1,12 +1,13 @@
-import { Button, CloseButton, Dialog, DialogPanel, DialogTitle, Field, Fieldset, Listbox, ListboxButton, ListboxOption, ListboxOptions, Menu, MenuButton, MenuItem, MenuItems, Popover, PopoverButton, PopoverPanel, Tab, TabGroup, TabList, TabPanel, TabPanels, Textarea } from "@headlessui/react";
-import { ArrowDownTrayIcon, ArrowPathIcon, ArrowsPointingOutIcon, ArrowUpTrayIcon, CheckIcon, ChevronDownIcon, InformationCircleIcon, KeyIcon, PlayIcon, PlusIcon, SparklesIcon, TrashIcon } from "@heroicons/react/16/solid";
+import { Button, CloseButton, Dialog, DialogPanel, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel, Field, Fieldset, Label, Listbox, ListboxButton, ListboxOption, ListboxOptions, Menu, MenuButton, MenuItem, MenuItems, Popover, PopoverButton, PopoverPanel, Switch, Tab, TabGroup, TabList, TabPanel, TabPanels, Textarea } from "@headlessui/react";
+import { ArrowDownTrayIcon, ArrowPathIcon, ArrowRightIcon, ArrowsPointingOutIcon, ArrowUpTrayIcon, CheckIcon, ChevronDownIcon, InformationCircleIcon, KeyIcon, PlayIcon, PlusIcon, SparklesIcon, TrashIcon } from "@heroicons/react/16/solid";
 import clsx from "clsx";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { downloadFile } from "./utils.js";
 
 const INFO = {
   originalTextInfo: "This is the original text that will be evaluated for privacy and utility. You can add multiple texts, and each text can have editable and non-editable parts.",
-  "Single text": "This method evaluates a single piece of text, which can be either editable or non-editable.",
-  "With non-editable text": "This method evaluates a piece of text that includes both editable and non-editable parts, allowing for a more comprehensive analysis.",
+  "Single turn": "This method evaluates a single piece of text, which can be either editable or non-editable.",
+  "Multi turn": "This method evaluates a piece of text that includes both editable and non-editable parts, allowing for a more comprehensive analysis.",
   "General author profiling": "This method evaluates the text for general author profiling, inferring 8 types of personal information such as age, gender, and location.",
   "Personal QA": "This method evaluates the text by asking specific questions about the author, such as their interests and preferences.",
   "Naive LM as a judge": "This method uses a naive language model to judge the utility of the text based on its coherence and relevance.",
@@ -15,8 +16,8 @@ const INFO = {
 };
 
 const originalTextMethods = [
-  "Single text",
-  "With non-editable text",
+  "Single turn",
+  "Multi turn",
 ];
 
 const privacyEvaluationMethods = [
@@ -39,6 +40,15 @@ function App() {
     },
     () => localStorage.getItem("apiKey") || "",
   );
+  const showGuide = useSyncExternalStore(
+    (onStoreChange) => {
+      const handleStorageChange = () => onStoreChange();
+      addEventListener("storage", handleStorageChange);
+      return () => removeEventListener("storage", handleStorageChange);
+    },
+    () => localStorage.getItem("showGuide") === "true",
+  );
+
   const [originalTextMethod, setOriginalTextMethod] = useState(originalTextMethods[0]);
   const [privacyEvaluationMethod, setPrivacyEvaluationMethod] = useState(privacyEvaluationMethods[0]);
   const [utilityEvaluationMethod, setUtilityEvaluationMethod] = useState(utilityEvaluationMethods[0]);
@@ -67,12 +77,35 @@ function App() {
     if (running) {
       setTimeout(() => {
         setRunning(false);
-      }, 2000); // Simulate a delay for the evaluation
+      }, 2000);
     }
   }, [running]);
 
   return (
     <>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-2xl font-medium">Anonymization Playground</h1>
+        <Field className="flex items-center space-x-2 text-neutral-200/50 text-sm">
+          <Switch
+            checked={showGuide}
+            onChange={(value) => {
+              if (value) {
+                localStorage.setItem("showGuide", value.toString());
+              } else {
+                localStorage.removeItem("showGuide");
+              }
+              dispatchEvent(new Event("storage"));
+            }}
+            className="group relative flex h-4 w-8 cursor-pointer rounded-full bg-white/10 p-1 ease-in-out focus:not-data-focus:outline-none data-checked:bg-white/10 data-focus:outline data-focus:outline-white"
+          >
+            <span
+              aria-hidden="true"
+              className="pointer-events-none inline-block size-2 translate-x-0 rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out group-data-checked:translate-x-4"
+            />
+          </Switch>
+          <Label>Show guide</Label>
+        </Field>
+      </div>
       <div className="flex-1 grid sm:grid-cols-3 gap-4">
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -128,7 +161,7 @@ function App() {
               {originalTexts.map(({ id, editable, noneditable }) => (
                 <TabPanel key={id}>
                   <Fieldset className="space-y-2">
-                    {originalTextMethod === "With non-editable text" && <Field>
+                    {originalTextMethod === "Multi turn" && <Field>
                       <Textarea
                         className={clsx(
                           'block w-full resize-none rounded-lg border-none bg-white/5 px-3 py-1.5 text-sm/6',
@@ -177,7 +210,7 @@ function App() {
                 ))}
               </TabList>
               <Menu>
-                <MenuButton className="rounded-lg px-2 py-1 text-sm/6 font-medium focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/5">
+                <MenuButton className="rounded-lg p-2 text-sm/6 font-medium focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/5">
                   <PlusIcon className="size-4" />
                 </MenuButton>
                 <MenuItems
@@ -205,6 +238,30 @@ function App() {
                   </MenuItem>
                   <MenuItem>
                     <button className="group flex w-full items-center gap-2 rounded-lg px-3 py-1.5 data-focus:bg-white/10" onClick={() => {
+                      const fileInput = document.createElement("input");
+                      fileInput.type = "file";
+                      fileInput.accept = ".jsonl";
+                      fileInput.onchange = (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const content = event.target.result;
+                          const lines = content.split("\n").filter(line => line.trim());
+                          const newTexts = lines.map((line) => {
+                            try {
+                              const data = JSON.parse(line);
+                              return { id: crypto.randomUUID(), editable: data.editable || "", noneditable: data.noneditable || "" };
+                            } catch (error) {
+                              console.error("Invalid JSON line:", line);
+                              return { id: crypto.randomUUID(), editable: "", noneditable: "" };
+                            }
+                          });
+                          setOriginalTexts((prev) => [...prev, ...newTexts]);
+                        };
+                        reader.readAsText(file);
+                      };
+                      fileInput.click();
                     }}>
                       <ArrowUpTrayIcon className="size-4" />
                       Upload jsonl file
@@ -212,7 +269,7 @@ function App() {
                   </MenuItem>
                 </MenuItems>
               </Menu>
-              <Button className="rounded-lg px-2 py-1 text-sm/6 font-medium focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/5" onClick={() => setIsOpen(true)}>
+              <Button className="rounded-lg p-2 text-sm/6 font-medium focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/5" onClick={() => setIsOpen(true)}>
                 <ArrowsPointingOutIcon className="size-4" />
               </Button>
             </div>
@@ -253,9 +310,9 @@ function App() {
               ))}
             </ListboxOptions>
           </Listbox>
-          <p className="rounded-lg bg-white/5 p-4 text-sm/6 text-neutral-200/50">
+          {showGuide && <p className="rounded-lg bg-white/5 p-4 text-sm/6 text-neutral-200/50">
             {INFO[privacyEvaluationMethod] || "Select a privacy evaluation method to see the details."}
-          </p>
+          </p>}
         </div>
         <div className="space-y-2">
           <h2 className="text-neutral-200/50">Utility evaluation</h2>
@@ -292,11 +349,11 @@ function App() {
               ))}
             </ListboxOptions>
           </Listbox>
-          <p className="rounded-lg bg-white/5 p-4 text-sm/6 text-neutral-200/50">
+          {showGuide && <p className="rounded-lg bg-white/5 p-4 text-sm/6 text-neutral-200/50">
             {INFO[utilityEvaluationMethod] || "Select a utility evaluation method to see the details."}
-          </p>
+          </p>}
         </div>
-        <div className="sm:col-span-3 space-x-2 flex">
+        <div className="sm:col-span-3 space-x-2 flex border-b border-white/5 pb-4">
           <Button className="flex-1 flex justify-center items-center space-x-2 font-medium text-sm bg-white/5 rounded-lg px-4 py-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10" onClick={() => {
             if (!apiKey) {
               const newApiKey = prompt("Please enter your OpenAI API key:");
@@ -311,12 +368,124 @@ function App() {
           </Button>
           {!running && apiKey && <Button className="flex justify-center items-center space-x-2 font-medium text-sm bg-white/5 rounded-lg px-4 py-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10" onClick={() => {
             const newApiKey = prompt("Please enter your new OpenAI API key:", apiKey || "");
+            if (newApiKey === null) return;
             localStorage.setItem("apiKey", newApiKey);
             dispatchEvent(new Event("storage"));
           }}>
             <KeyIcon className="size-4" />
             <span>Change API key</span>
           </Button>}
+        </div>
+        <div className="sm:col-span-2 space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-medium">Result</h2>
+            <Button className="flex justify-center items-center space-x-2 font-medium text-sm rounded-lg p-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/5" onClick={() => {
+            }}>
+              <ArrowDownTrayIcon className="size-4" />
+            </Button>
+          </div>
+          <TabGroup className="space-y-2">
+            <TabPanels>
+              {originalTexts.map(({ id, editable, noneditable }) => (
+                <TabPanel key={id}>
+                  <div className="space-x-2 flex items-center">
+                    <Fieldset className="space-y-2 flex-1">
+                      {noneditable && <Field>
+                        <Textarea
+                          className={clsx(
+                            'block w-full resize-none rounded-lg border-none bg-white/5 px-3 py-1.5 text-sm/6',
+                            'focus:not-data-focus:outline-none data-focus:outline-2 data-focus:-outline-offset-2 data-focus:outline-white/25'
+                          )}
+                          rows={6}
+                          value={noneditable}
+                          disabled
+                        />
+                      </Field>}
+                      <Field>
+                        <Textarea
+                          className={clsx(
+                            'block w-full resize-none rounded-lg border-none bg-white/5 px-3 py-1.5 text-sm/6',
+                            'focus:not-data-focus:outline-none data-focus:outline-2 data-focus:-outline-offset-2 data-focus:outline-white/25'
+                          )}
+                          rows={3}
+                          value={editable}
+                          disabled
+                          required
+                        />
+                      </Field>
+                    </Fieldset>
+                    <ArrowRightIcon className="size-4" />
+                    <Fieldset className="space-y-2 flex-1">
+                      {noneditable && <Field>
+                        <Textarea
+                          className={clsx(
+                            'block w-full resize-none rounded-lg border-none bg-white/5 px-3 py-1.5 text-sm/6',
+                            'focus:not-data-focus:outline-none data-focus:outline-2 data-focus:-outline-offset-2 data-focus:outline-white/25'
+                          )}
+                          rows={6}
+                          value={noneditable}
+                          disabled
+                        />
+                      </Field>}
+                      <Field>
+                        <Textarea
+                          className={clsx(
+                            'block w-full resize-none rounded-lg border-none bg-white/5 px-3 py-1.5 text-sm/6',
+                            'focus:not-data-focus:outline-none data-focus:outline-2 data-focus:-outline-offset-2 data-focus:outline-white/25'
+                          )}
+                          rows={3}
+                          value={editable}
+                          disabled
+                          required
+                        />
+                      </Field>
+                    </Fieldset>
+                  </div>
+                </TabPanel>
+              ))}
+            </TabPanels>
+            <TabList className="flex flex-1 overflow-x-auto">
+              {originalTexts.map(({ id }, index) => (
+                <Tab
+                  className="rounded-lg px-3 py-1 text-sm/6 font-medium focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/5 data-selected:bg-white/10 data-selected:data-hover:bg-white/10"
+                  key={id}
+                >
+                  {index + 1}
+                </Tab>
+              ))}
+            </TabList>
+          </TabGroup>
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-medium">Evaluation result</h2>
+            <Button className="flex justify-center items-center space-x-2 font-medium text-sm rounded-lg p-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/5" onClick={() => {
+            }}>
+              <ArrowDownTrayIcon className="size-4" />
+            </Button>
+          </div>
+          <div className="divide-y divide-white/5 rounded-lg bg-white/5">
+            <Disclosure as="div" className="p-4" defaultOpen>
+              <DisclosureButton className="group flex w-full items-center justify-between">
+                <span className="text-sm/6 font-medium group-data-hover:text-neutral-200/80">
+                  Privacy evaluation
+                </span>
+                <ChevronDownIcon className="size-5 fill-white/60 group-data-hover:fill-white/50 group-data-open:rotate-180" />
+              </DisclosureButton>
+              <DisclosurePanel className="mt-2 text-sm/5 text-neutral-200/50">
+                If you're unhappy with your purchase, we'll refund you in full.
+              </DisclosurePanel>
+            </Disclosure>
+            <Disclosure as="div" className="p-4" defaultOpen>
+              <DisclosureButton className="group flex w-full items-center justify-between">
+                <span className="text-sm/6 font-medium group-data-hover:text-neutral-200/80">
+                  Utility evaluation
+                </span>
+                <ChevronDownIcon className="size-5 fill-white/60 group-data-hover:fill-white/50 group-data-open:rotate-180" />
+              </DisclosureButton>
+              <DisclosurePanel className="mt-2 text-sm/5 text-neutral-200/50">No.</DisclosurePanel>
+            </Disclosure>
+          </div>
         </div>
       </div>
       <Dialog open={isOpen} as="div" className="relative z-10 focus:outline-none" onClose={() => setIsOpen(false)}>
@@ -343,7 +512,7 @@ function App() {
                       <TrashIcon className="size-4" />
                     </Button>
                   </div>
-                  {originalTextMethod === "With non-editable text" && <Field>
+                  {originalTextMethod === "Multi turn" && <Field>
                     <Textarea
                       className={clsx(
                         'block w-full resize-none rounded-lg border-none bg-white/5 px-3 py-1.5 text-sm/6',
@@ -379,9 +548,13 @@ function App() {
                 </Fieldset>
               ))}
               <div className="flex justify-end space-x-2">
-                <Button
-                  className="flex items-center space-x-2 font-medium text-sm bg-white/5 rounded-lg px-4 p-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10"
-                >
+                <Button className="flex items-center space-x-2 font-medium text-sm bg-white/5 rounded-lg px-4 p-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10" onClick={() => {
+                  const jsonlData = originalTexts.map(text => JSON.stringify({
+                    editable: text.editable,
+                    noneditable: text.noneditable,
+                  })).join("\n");
+                  downloadFile("original_texts.jsonl", jsonlData);
+                }}>
                   <ArrowDownTrayIcon className="size-4" />
                   <span>Download as jsonl</span>
                 </Button>
