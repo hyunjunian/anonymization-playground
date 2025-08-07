@@ -1,7 +1,7 @@
 import { Button, CloseButton, Dialog, DialogPanel, DialogTitle, Field, Fieldset, Listbox, ListboxButton, ListboxOption, ListboxOptions, Menu, MenuButton, MenuItem, MenuItems, Tab, TabGroup, TabList, TabPanel, TabPanels, Textarea } from "@headlessui/react";
-import { ArrowDownIcon, ArrowPathIcon, ArrowsPointingOutIcon, ArrowUpTrayIcon, CheckIcon, ChevronDownIcon, PlusIcon, SparklesIcon, TrashIcon } from "@heroicons/react/16/solid";
+import { ArrowDownIcon, ArrowPathIcon, ArrowsPointingOutIcon, ArrowUpTrayIcon, CheckIcon, ChevronDownIcon, KeyIcon, PlayIcon, PlusIcon, SparklesIcon, TrashIcon } from "@heroicons/react/16/solid";
 import clsx from "clsx";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 const originalTextMethods = [
   "Single text",
@@ -20,6 +20,14 @@ const utilityEvaluationMethods = [
 ];
 
 function App() {
+  const apiKey = useSyncExternalStore(
+    (onStoreChange) => {
+      const handleStorageChange = () => onStoreChange();
+      addEventListener("storage", handleStorageChange);
+      return () => removeEventListener("storage", handleStorageChange);
+    },
+    () => localStorage.getItem("apiKey") || "",
+  );
   const [originalTextMethod, setOriginalTextMethod] = useState(originalTextMethods[0]);
   const [privacyEvaluationMethod, setPrivacyEvaluationMethod] = useState(privacyEvaluationMethods[0]);
   const [utilityEvaluationMethod, setUtilityEvaluationMethod] = useState(utilityEvaluationMethods[0]);
@@ -100,7 +108,7 @@ function App() {
                           'focus:not-data-focus:outline-none data-focus:outline-2 data-focus:-outline-offset-2 data-focus:outline-white/25'
                         )}
                         rows={6}
-                        placeholder="Non-editable text..."
+                        placeholder="Type non-editable text..."
                         value={noneditable}
                         onChange={(e) => {
                           setOriginalTexts((prev) => prev.map((text) =>
@@ -116,7 +124,7 @@ function App() {
                           'focus:not-data-focus:outline-none data-focus:outline-2 data-focus:-outline-offset-2 data-focus:outline-white/25'
                         )}
                         rows={3}
-                        placeholder="Editable text..."
+                        placeholder="Type editable text..."
                         value={editable}
                         onChange={(e) => {
                           setOriginalTexts((prev) => prev.map((text) =>
@@ -264,12 +272,26 @@ function App() {
             {utilityEvaluationMethod === "Text as a prompt" && "Results for Text as a prompt will be displayed here."}
           </p>
         </div>
-        <Button className="sm:col-span-3 flex justify-center items-center space-x-2 font-medium text-sm bg-white/5 rounded-lg p-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10" onClick={() => {
-          setRunning(true);
-        }} disabled={running}>
-          <span>{running ? "Running..." : "Run"}</span>
-          {running ? <ArrowPathIcon className="size-4 animate-spin" /> : <ArrowDownIcon className="size-4" />}
-        </Button>
+        <div className="sm:col-span-3 space-x-2 flex">
+          <Button className="flex-1 flex justify-center items-center space-x-2 font-medium text-sm bg-white/5 rounded-lg px-4 py-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10" onClick={() => {
+            if (!apiKey) {
+              localStorage.setItem("apiKey", prompt("To run this evaluation, please enter your OpenAI API key:"));
+              dispatchEvent(new Event("storage"));
+            }
+            setRunning(true);
+          }} disabled={running}>
+            <span>{running ? "Running..." : "Run"}</span>
+            {running ? <ArrowPathIcon className="size-4 animate-spin" /> : <PlayIcon className="size-4" />}
+          </Button>
+          {!running && apiKey && <Button className="flex justify-center items-center space-x-2 font-medium text-sm bg-white/5 rounded-lg px-4 py-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10" onClick={() => {
+            const newApiKey = prompt("Please enter your new OpenAI API key:", apiKey || "");
+            localStorage.setItem("apiKey", newApiKey);
+            dispatchEvent(new Event("storage"));
+          }}>
+            <KeyIcon className="size-4" />
+            <span>Change API key</span>
+          </Button>}
+        </div>
       </div>
       <Dialog open={isOpen} as="div" className="relative z-10 focus:outline-none" onClose={() => setIsOpen(false)}>
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
@@ -288,7 +310,8 @@ function App() {
                     <Button
                       className="rounded-lg p-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10"
                       onClick={() => {
-                        setOriginalTexts((prev) => prev.filter((text) => text.id !== id));
+                        if (originalTexts.length <= 1) return alert("At least one text is required.");
+                        setOriginalTexts((prev) => prev.length > 1 ? prev.filter((text) => text.id !== id) : prev);
                       }}
                     >
                       <TrashIcon className="size-4" />
