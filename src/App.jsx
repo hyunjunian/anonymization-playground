@@ -1,7 +1,18 @@
-import { Button, CloseButton, Dialog, DialogPanel, DialogTitle, Field, Fieldset, Listbox, ListboxButton, ListboxOption, ListboxOptions, Menu, MenuButton, MenuItem, MenuItems, Tab, TabGroup, TabList, TabPanel, TabPanels, Textarea } from "@headlessui/react";
-import { ArrowDownIcon, ArrowPathIcon, ArrowsPointingOutIcon, ArrowUpTrayIcon, CheckIcon, ChevronDownIcon, KeyIcon, PlayIcon, PlusIcon, SparklesIcon, TrashIcon } from "@heroicons/react/16/solid";
+import { Button, CloseButton, Dialog, DialogPanel, DialogTitle, Field, Fieldset, Listbox, ListboxButton, ListboxOption, ListboxOptions, Menu, MenuButton, MenuItem, MenuItems, Popover, PopoverButton, PopoverPanel, Tab, TabGroup, TabList, TabPanel, TabPanels, Textarea } from "@headlessui/react";
+import { ArrowDownTrayIcon, ArrowPathIcon, ArrowsPointingOutIcon, ArrowUpTrayIcon, CheckIcon, ChevronDownIcon, InformationCircleIcon, KeyIcon, PlayIcon, PlusIcon, SparklesIcon, TrashIcon } from "@heroicons/react/16/solid";
 import clsx from "clsx";
 import { useEffect, useState, useSyncExternalStore } from "react";
+
+const INFO = {
+  originalTextInfo: "This is the original text that will be evaluated for privacy and utility. You can add multiple texts, and each text can have editable and non-editable parts.",
+  "Single text": "This method evaluates a single piece of text, which can be either editable or non-editable.",
+  "With non-editable text": "This method evaluates a piece of text that includes both editable and non-editable parts, allowing for a more comprehensive analysis.",
+  "General author profiling": "This method evaluates the text for general author profiling, inferring 8 types of personal information such as age, gender, and location.",
+  "Personal QA": "This method evaluates the text by asking specific questions about the author, such as their interests and preferences.",
+  "Naive LM as a judge": "This method uses a naive language model to judge the utility of the text based on its coherence and relevance.",
+  "Utility QA": "This method evaluates the text by asking questions about its content, assessing how well it serves its intended purpose.",
+  "Text as a prompt": "This method uses the text as a prompt for generating new content, evaluating its utility based on the quality of the generated output.",
+};
 
 const originalTextMethods = [
   "Single text",
@@ -40,15 +51,17 @@ function App() {
   const [running, setRunning] = useState(false);
 
   useEffect(() => {
-    const handleBeforeUnload = (event) => {
-      event.preventDefault();
-      event.returnValue = true;
-    };
-    addEventListener("beforeunload", handleBeforeUnload);
-    return () => {
-      removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, []);
+    if (originalTexts.some(text => text.editable || text.noneditable)) {
+      const handleBeforeUnload = (event) => {
+        event.preventDefault();
+        event.returnValue = true;
+      };
+      addEventListener("beforeunload", handleBeforeUnload);
+      return () => {
+        removeEventListener("beforeunload", handleBeforeUnload);
+      };
+    }
+  }, [originalTexts]);
 
   useEffect(() => {
     if (running) {
@@ -62,7 +75,21 @@ function App() {
     <>
       <div className="flex-1 grid sm:grid-cols-3 gap-4">
         <div className="space-y-2">
-          <h2 className="text-neutral-200/50">Original text</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-neutral-200/50">Original text</h2>
+            <Popover>
+              <PopoverButton className="block text-sm/6 font-semibold text-neutral-200/50 focus:outline-none data-active:text-neutral-200 data-focus:outline data-focus:outline-white data-hover:text-neutral-200">
+                <InformationCircleIcon className="size-4" />
+              </PopoverButton>
+              <PopoverPanel
+                transition
+                anchor="bottom"
+                className="p-4 border border-white/5 w-xs rounded-lg bg-neutral-800 text-sm/6 transition duration-200 ease-in-out [--anchor-gap:--spacing(5)] data-closed:-translate-y-1 data-closed:opacity-0"
+              >
+                <p>{INFO.originalTextInfo}</p>
+              </PopoverPanel>
+            </Popover>
+          </div>
           <Listbox value={originalTextMethod} onChange={setOriginalTextMethod}>
             <ListboxButton
               className={clsx(
@@ -227,8 +254,7 @@ function App() {
             </ListboxOptions>
           </Listbox>
           <p className="rounded-lg bg-white/5 p-4 text-sm/6 text-neutral-200/50">
-            {privacyEvaluationMethod === "General author profiling" && "We will have the language model infer a total of eight pieces of personal information."}
-            {privacyEvaluationMethod === "Personal QA" && "Results for Personal QA will be displayed here."}
+            {INFO[privacyEvaluationMethod] || "Select a privacy evaluation method to see the details."}
           </p>
         </div>
         <div className="space-y-2">
@@ -266,22 +292,22 @@ function App() {
               ))}
             </ListboxOptions>
           </Listbox>
-          <p className="rounded-lg bg-white/5 p-4 text-sm/6">
-            {utilityEvaluationMethod === "Naive LM as a judge" && "Results for Naive LM as a judge will be displayed here."}
-            {utilityEvaluationMethod === "Utility QA" && "Results for Utility QA will be displayed here."}
-            {utilityEvaluationMethod === "Text as a prompt" && "Results for Text as a prompt will be displayed here."}
+          <p className="rounded-lg bg-white/5 p-4 text-sm/6 text-neutral-200/50">
+            {INFO[utilityEvaluationMethod] || "Select a utility evaluation method to see the details."}
           </p>
         </div>
         <div className="sm:col-span-3 space-x-2 flex">
           <Button className="flex-1 flex justify-center items-center space-x-2 font-medium text-sm bg-white/5 rounded-lg px-4 py-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10" onClick={() => {
             if (!apiKey) {
-              localStorage.setItem("apiKey", prompt("To run this evaluation, please enter your OpenAI API key:"));
+              const newApiKey = prompt("Please enter your OpenAI API key:");
+              if (!newApiKey) return alert("API key is required to run.");
+              localStorage.setItem("apiKey", newApiKey);
               dispatchEvent(new Event("storage"));
             }
             setRunning(true);
           }} disabled={running}>
-            <span>{running ? "Running..." : "Run"}</span>
             {running ? <ArrowPathIcon className="size-4 animate-spin" /> : <PlayIcon className="size-4" />}
+            <span>{running ? "Running..." : "Run"}</span>
           </Button>
           {!running && apiKey && <Button className="flex justify-center items-center space-x-2 font-medium text-sm bg-white/5 rounded-lg px-4 py-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10" onClick={() => {
             const newApiKey = prompt("Please enter your new OpenAI API key:", apiKey || "");
@@ -298,7 +324,7 @@ function App() {
           <div className="flex min-h-full items-center justify-center p-4">
             <DialogPanel
               transition
-              className="w-full max-w-xl rounded-xl space-y-4 bg-white/5 p-6 backdrop-blur-2xl duration-300 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
+              className="border border-white/5 w-full max-w-xl rounded-xl space-y-4 bg-white/5 p-6 backdrop-blur-2xl duration-300 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
             >
               <DialogTitle as="h3" className="text-base/7 font-medium">
                 Original texts
@@ -352,7 +378,13 @@ function App() {
                   </Field>
                 </Fieldset>
               ))}
-              <div className="flex justify-end">
+              <div className="flex justify-end space-x-2">
+                <Button
+                  className="flex items-center space-x-2 font-medium text-sm bg-white/5 rounded-lg px-4 p-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10"
+                >
+                  <ArrowDownTrayIcon className="size-4" />
+                  <span>Download as jsonl</span>
+                </Button>
                 <CloseButton
                   className="font-medium text-sm bg-white/5 rounded-lg px-4 p-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10"
                 >
