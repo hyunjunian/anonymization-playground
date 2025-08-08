@@ -1,7 +1,7 @@
 import { Button, CloseButton, Dialog, DialogPanel, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel, Field, Fieldset, Label, Listbox, ListboxButton, ListboxOption, ListboxOptions, Menu, MenuButton, MenuItem, MenuItems, Popover, PopoverButton, PopoverPanel, Switch, Tab, TabGroup, TabList, TabPanel, TabPanels, Textarea } from "@headlessui/react";
 import { ArrowDownTrayIcon, ArrowPathIcon, ArrowRightIcon, ArrowsPointingOutIcon, ArrowUpTrayIcon, CheckIcon, ChevronDownIcon, InformationCircleIcon, KeyIcon, PlayIcon, PlusIcon, SparklesIcon, TrashIcon } from "@heroicons/react/16/solid";
 import clsx from "clsx";
-import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { downloadFile, getResults } from "./utils.js";
 
 const INFO = {
@@ -55,11 +55,35 @@ function App() {
   const [isOpen, setIsOpen] = useState(false);
   const [originalTexts, setOriginalTexts] = useState([{
     id: crypto.randomUUID(),
-    text: "",
+    text: "I'm male, 33 years old, living in Seoul South Korea.",
     context: "",
   }]);
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState([]);
+
+  const evaluationResults = useMemo(() => {
+    if (!results) return;
+    const map = {
+      "total": { sum: 0, count: 0 },
+      "income": { sum: 0, count: 0 },
+      "education": { sum: 0, count: 0 },
+      "pobp": { sum: 0, count: 0 },
+      "location": { sum: 0, count: 0 },
+      "married": { sum: 0, count: 0 },
+      "gender": { sum: 0, count: 0 },
+      "age": { sum: 0, count: 0 },
+      "occupation": { sum: 0, count: 0 },
+    };
+    results.forEach((result) => {
+      Object.entries(result.texts[1].privacy).forEach(([key, value]) => {
+        map[key].sum += value.score?.[0] || 0;
+        map[key].count += 1;
+        map.total.sum += value.score?.[0] || 0;
+        map.total.count += 1;
+      });
+    });
+    return map;
+  }, [results]);
 
   useEffect(() => {
     if (originalTexts.some(text => text.text || text.context)) {
@@ -263,10 +287,10 @@ function App() {
                           const newTexts = lines.map((line) => {
                             try {
                               const data = JSON.parse(line);
-                              return { id: crypto.randomUUID(), editable: data.editable || "", noneditable: data.noneditable || "" };
+                              return { id: crypto.randomUUID(), text: data.text || "", context: data.context || "" };
                             } catch (error) {
                               console.error("Invalid JSON line:", line);
-                              return { id: crypto.randomUUID(), editable: "", noneditable: "" };
+                              return { id: crypto.randomUUID(), text: "", context: "" };
                             }
                           });
                           setOriginalTexts((prev) => [...prev, ...newTexts]);
@@ -434,10 +458,10 @@ function App() {
                             />
                           </Field>
                           <dl className="divide-y divide-white/10 text-sm/6 tabular-nums">
-                            {Object.entries(text.privacy).map(([key, value]) => (
+                            {Object.entries(text.privacy).map(([key, value]) => value.confidence < 3 && index === 0 ? null : (
                               <div className="flex items-center py-2 space-x-4" key={key}>
                                 <dt className="font-medium">{key}</dt>
-                                <dd className="text-right flex-1 text-neutral-200/50">{value.value[0]}</dd>
+                                <dd className={clsx("text-right flex-1 text-neutral-200/50", { "text-red-500/50": index > 0 && value.score[0] === 1 })}>{value.value[0]}</dd>
                                 <dd className="text-neutral-200/50">{value.confidence}</dd>
                               </div>
                             ))}
@@ -479,47 +503,49 @@ function App() {
               <dl className="divide-y divide-white/10 text-sm/6 tabular-nums">
                 <div className="flex items-center py-2 space-x-2 font-medium">
                   <dt className="flex-1">Privacy</dt>
-                  <dd className="text-neutral-200/50 text-sm/6">1</dd>
+                  {/* <dd className="text-neutral-200/50 text-sm/6">1</dd>
                   <ArrowRightIcon className="text-neutral-200/50 size-4" />
-                  <dd className="text-neutral-200/50 text-sm/6">0.4</dd>
+                  <dd className="text-neutral-200/50 text-sm/6">0.4</dd> */}
                 </div>
-                <div className="flex items-center py-2 pl-4 space-x-2 text-sm/6">
-                  <dt className="flex-1">age</dt>
-                  <dd className="text-neutral-200/50">1</dd>
-                  <ArrowRightIcon className="text-neutral-200/50 size-4" />
-                  <dd className="text-neutral-200/50">0.5</dd>
-                </div>
-                <div className="flex items-center py-2 pl-4 space-x-2 text-sm/6">
-                  <dt className="flex-1">age</dt>
-                  <dd className="text-neutral-200/50">1</dd>
-                  <ArrowRightIcon className="text-neutral-200/50 size-4" />
-                  <dd className="text-neutral-200/50">0.5</dd>
-                </div>
+                {Object.entries(evaluationResults).map(([key, { sum, count }]) => count ? (
+                  <div className="flex items-center py-2 pl-4 space-x-2 text-sm/6" key={key}>
+                    <dt className="flex-1">{key}</dt>
+                    <dd className="text-neutral-200/50">1</dd>
+                    <ArrowRightIcon className="text-neutral-200/50 size-4" />
+                    <dd className="text-neutral-200/50">{sum / count}</dd>
+                  </div>
+                ) : null)}
               </dl>
               <dl className="divide-y divide-white/10 text-sm/6 tabular-nums">
                 <div className="flex items-center py-2 space-x-2 font-medium">
                   <dt className="flex-1">Utility</dt>
-                  <dd className="text-neutral-200/50 text-sm/6">1</dd>
+                  {/* <dd className="text-neutral-200/50 text-sm/6">1</dd>
                   <ArrowRightIcon className="text-neutral-200/50 size-4" />
-                  <dd className="text-neutral-200/50 text-sm/6">0.4</dd>
+                  <dd className="text-neutral-200/50 text-sm/6">0.4</dd> */}
                 </div>
                 <div className="flex items-center py-2 pl-4 space-x-2 text-sm/6">
                   <dt className="flex-1">readability</dt>
                   <dd className="text-neutral-200/50">1</dd>
                   <ArrowRightIcon className="text-neutral-200/50 size-4" />
-                  <dd className="text-neutral-200/50">0.5</dd>
+                  <dd className="text-neutral-200/50">{results.map((result) => result.texts[1].utility.readability.score).reduce((a, b) => a + b, 0) / results.length}</dd>
                 </div>
                 <div className="flex items-center py-2 pl-4 space-x-2 text-sm/6">
                   <dt className="flex-1">meaning</dt>
                   <dd className="text-neutral-200/50">1</dd>
                   <ArrowRightIcon className="text-neutral-200/50 size-4" />
-                  <dd className="text-neutral-200/50">0.5</dd>
+                  <dd className="text-neutral-200/50">{results.map((result) => result.texts[1].utility.meaning.score).reduce((a, b) => a + b, 0) / results.length}</dd>
+                </div>
+                <div className="flex items-center py-2 pl-4 space-x-2 text-sm/6">
+                  <dt className="flex-1">hallucinations</dt>
+                  <dd className="text-neutral-200/50">1</dd>
+                  <ArrowRightIcon className="text-neutral-200/50 size-4" />
+                  <dd className="text-neutral-200/50">{results.map((result) => result.texts[1].utility.hallucinations.score).reduce((a, b) => a + b, 0) / results.length}</dd>
                 </div>
               </dl>
             </div>
           </>
         )}
-      </div >
+      </div>
       <Dialog open={isOpen} as="div" className="relative z-10 focus:outline-none" onClose={() => setIsOpen(false)}>
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">

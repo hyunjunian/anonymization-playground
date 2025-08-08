@@ -41,11 +41,8 @@ async function getResponse({ apiKey, input, instruction = "", model = "gpt-4.1-m
     return resText;
 }
 
-async function get_equality(value, truth) {
-    return new Promise(resolve => setTimeout(() => {
-        // 더미 점수 반환
-        resolve([1, 0, 0]);
-    }, 500));
+async function getEquality(value, truth) {
+    return value === truth;
 }
 
 const TYPE_TO_STR = {
@@ -77,9 +74,7 @@ const TYPE_TO_ENUM = {
     "gender": ["male", "female"],
 };
 
-const TIMEOUT = 10000;
-
-async function getPrivacy({ apiKey, text, truth }) {
+async function getPrivacy(apiKey, text, truth) {
     if (!apiKey) return console.error("API key is required.");
     if (!text) return console.error("Text is required.");
     const types = truth ? Object.keys(truth) : Object.keys(TYPE_TO_STR);
@@ -104,12 +99,12 @@ async function getPrivacy({ apiKey, text, truth }) {
                         ...(TYPE_TO_ENUM.hasOwnProperty(piiType) && { enum: TYPE_TO_ENUM[piiType] }),
                     },
                 },
-                certainty: {
+                confidence: {
                     type: "number",
                     description: "Based on your inference how certain you are from 1-5. 1 is very uncertain only based on biases and 5 has clear evidence in the comment. Only give the number.",
                 },
             },
-            required: ["inference", "value", "certainty"],
+            required: ["inference", "value", "confidence"],
             additionalProperties: false,
         };
         return props;
@@ -125,11 +120,8 @@ ${text}
 
 First reason step-by-step for each value going over all information in the text as well as language used. Then give your top 3 guesses for each value based on your reasoning. Follow exactly the format specified.`;
 
-    const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Request timed out')), TIMEOUT)
-    );
-
-    const resPromise = getResponse({
+    const res = await getResponse({
+        apiKey,
         instructions,
         input,
         text: {
@@ -145,35 +137,37 @@ First reason step-by-step for each value going over all information in the text 
             },
         },
     });
-    const res = await Promise.race([resPromise, timeoutPromise]);
 
     const privacy = JSON.parse(res);
 
-    // if (truth) {
-    //     for (const piiType of types) {
-    //         if ("score" in privacy[piiType]) {
-    //             continue;
-    //         }
-    //         if (piiType === "age") {
-    //             privacy[piiType].score = privacy[piiType].value.map(g =>
-    //                 Math.abs(g - truth[piiType]) <= 5 ? 1 : 0
-    //             );
-    //         } else if (["gender", "married", "income", "education"].includes(piiType)) {
-    //             privacy[piiType].score = privacy[piiType].value.map(g =>
-    //                 (g.split('(', 1)[0].trim().toLowerCase() === truth[piiType].split('(', 1)[0].trim().toLowerCase()) ? 1 : 0
-    //             );
-    //         } else if (["location", "occupation", "pobp"].includes(piiType)) {
-    //             const equalityPromise = get_equality(privacy[piiType].value, truth[piiType]);
-    //             privacy[piiType].score = await Promise.race([equalityPromise, timeoutPromise]);
-    //         } else {
-    //             throw new Error(`Unknown type: ${piiType}`);
-    //         }
-    //     }
-    // }
+    if (truth) {
+        for (const piiType of types) {
+            if ("score" in privacy[piiType]) {
+                continue;
+            }
+            if (piiType === "age") {
+                privacy[piiType].score = privacy[piiType].value.map((g) =>
+                    Math.abs(g - truth[piiType]) <= 5 ? 1 : 0
+                );
+            } else if (["gender", "married", "income", "education"].includes(piiType)) {
+                privacy[piiType].score = privacy[piiType].value.map((g) =>
+                    (g.split('(', 1)[0].trim().toLowerCase() === truth[piiType].split('(', 1)[0].trim().toLowerCase()) ? 1 : 0
+                );
+            } else if (["location", "occupation", "pobp"].includes(piiType)) {
+                privacy[piiType].score = privacy[piiType].value.map((g) =>
+                    (g.split('(', 1)[0].trim().toLowerCase() === truth[piiType].split('(', 1)[0].trim().toLowerCase()) ? 1 : 0
+                );
+            } else {
+                throw new Error(`Unknown type: ${piiType}`);
+            }
+        }
+    }
+
+    console.log("privacy:", privacy);
     return privacy;
 }
 
-async function getUtility({ apiKey, text, originalText }) {
+async function getUtility(apiKey, text, originalText) {
     if (!apiKey) return console.error("API key is required.");
     if (!text) return console.error("Text is required.");
     if (!originalText) return console.error("Original text is required.");
@@ -244,11 +238,64 @@ adapted_text: ${text}`,
             },
         },
     });
-    return JSON.parse(res);
+    const utility = JSON.parse(res);
+    console.log("utility:", utility);
+    return utility;
 }
 
-async function getAnonymizedText() {
-    return "This is an anonymized text.";
+async function getAnonymizedText(apiKey, text, privacy) {
+    const instruction = `You are an expert anonymizer that carefully adapts small parts of the text to make it anonymous. You follow the instructions and format precisely and you try to change as little as possible, keeping the original text in tact as much as possible. Only generalize information and do not invent new information.
+Example: 'my husband and I' -> 'my partner and I' is valid, but 'my husband and I' -> 'my wife and I' is not.
+Example: 'my husband and I have a dog' -> 'my partner and I have a dog' is valid, but 'my husband and I have a dog' -> 'my partner and I have a cat' is not.
+Example: 'my husband and I' -> 'I' is also valid as it only removes information.`;
+
+    const privacyPrompt = Object.entries(Object.entries(privacy).reduce((acc, [key, value]) => {
+        if (value.confidence < 3) return acc;
+        acc[key] = value;
+        return acc;
+    }, {}))
+        .map(([key, value]) => `Type: ${key}\nInference: ${value.explanation}\nGuess: ${value.value[0]}`)
+        .join('\n\n');
+
+    const input = `Below I give you a comment from a user as well as personal inferences made about the user that can be made from the comment. Your task is to anonymize the comment to prevent these inferences, while keeping the rest of the text intact.
+
+Comment:
+${text}
+
+Inferences:
+${privacyPrompt}
+
+In a first step briefly explain the changes you will make. In a new line write a single # and then return the anonymized text. Only change relevant parts and keep everything else as is. Make sure you keep the original meaning, i.e. do not invent new information instead generalize information.`;
+
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    while (true) {
+        if (retryCount >= maxRetries) {
+            console.error("Max retries reached. Returning empty string.");
+            return "";
+        }
+        try {
+            const res = await getResponse({ apiKey, instruction, input });
+
+            const startIndex = res.lastIndexOf('#');
+            if (startIndex === -1) throw new Error("Anonymization response does not contain the expected format.");
+
+            let chunk = res.substring(startIndex + 1).trim();
+
+            const endIndex = chunk.indexOf('\n');
+            if (endIndex !== -1) chunk = chunk.substring(0, endIndex);
+
+            if (!chunk) throw new Error("Anonymization response is empty after processing.");
+
+            console.log("Anonymized text:", chunk);
+
+            return chunk;
+        } catch (e) {
+            retryCount++;
+            console.error(`An error occurred: ${e.message}. Retrying (${retryCount}/${maxRetries})...`);
+        }
+    }
 }
 
 async function getResult({ apiKey, result, round = 1 }) {
@@ -256,12 +303,15 @@ async function getResult({ apiKey, result, round = 1 }) {
     if (!result || !result.texts || !Array.isArray(result.texts)) return console.error("Result is required and should contain texts.");
 
     let i = 0;
+    let retry = 0;
     while (true) {
+        if (retry > 3) return result;
         if (i > round) return result;
-        if (i === result.texts.length) result.texts.push({ text: await getAnonymizedText() });
+        if (i === result.texts.length) result.texts.push({ text: await getAnonymizedText(apiKey, result.texts[i - 1].text, result.texts[i - 1].privacy) });
         const text = result.texts[i];
         if ("privacy" in text && "utility" in text) {
             i++;
+            retry = 0;
             continue;
         }
         if (!("utility" in text) && i === 0) text.utility = {
@@ -269,12 +319,23 @@ async function getResult({ apiKey, result, round = 1 }) {
             meaning: { explanation: "", score: 10 },
             hallucinations: { explanation: "", score: 1 },
         };
+
+        let truth;
+        if (i > 0) {
+            truth = Object.entries(result.texts[0].privacy).reduce((acc, [key, value]) => {
+                if (value.confidence < 3) return acc;
+                acc[key] = value.value[0];
+                return acc;
+            }, {});
+        }
+
         const [privacy, utility] = await Promise.all([
-            "privacy" in text ? null : getPrivacy({ apiKey, input: text.text, instruction: "Evaluate the privacy of this text." }),
-            "utility" in text ? null : getUtility({ apiKey, text: text.text, originalText: result.texts[0].text }),
+            "privacy" in text ? null : getPrivacy(apiKey, [result.context || "", text.text].join(" ").trim(), truth),
+            "utility" in text ? null : getUtility(apiKey, [result.context || "", text.text].join(" ").trim(), result.texts[0].text),
         ]);
         if (privacy) text.privacy = privacy;
         if (utility) text.utility = utility;
+        retry++;
     }
 }
 
