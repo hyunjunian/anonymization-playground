@@ -2,7 +2,7 @@ import { Button, CloseButton, Dialog, DialogPanel, DialogTitle, Disclosure, Disc
 import { ArrowDownTrayIcon, ArrowPathIcon, ArrowRightIcon, ArrowsPointingOutIcon, ArrowUpTrayIcon, CheckIcon, ChevronDownIcon, InformationCircleIcon, KeyIcon, PlayIcon, PlusIcon, SparklesIcon, TrashIcon } from "@heroicons/react/16/solid";
 import clsx from "clsx";
 import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
-import { downloadFile } from "./utils.js";
+import { downloadFile, getResults } from "./utils.js";
 
 const INFO = {
   originalTextInfo: "This is the original text that will be evaluated for privacy and utility. You can add multiple texts, and each text can have editable and non-editable parts.",
@@ -55,14 +55,14 @@ function App() {
   const [isOpen, setIsOpen] = useState(false);
   const [originalTexts, setOriginalTexts] = useState([{
     id: crypto.randomUUID(),
-    editable: "",
-    noneditable: "",
+    text: "",
+    context: "",
   }]);
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState([]);
 
   useEffect(() => {
-    if (originalTexts.some(text => text.editable || text.noneditable)) {
+    if (originalTexts.some(text => text.text || text.context)) {
       const handleBeforeUnload = (event) => {
         event.preventDefault();
         event.returnValue = true;
@@ -75,53 +75,23 @@ function App() {
   }, [originalTexts]);
 
   useEffect(() => {
-    if (running) {
-      setTimeout(() => {
-        setRunning(false);
-        setResults([{
-          id: crypto.randomUUID(),
-          context: "Non-editable text",
-          texts: [
-            {
-              text: "Original text",
-              privacy: {
-                age: {
-                  value: ["25-34"],
-                  score: [1],
-                  confidence: 0.8,
-                },
-                location: {
-                  value: ["New York, NY"],
-                  score: [1],
-                  confidence: 0.8,
-                },
-              },
-              utility: {
-                meaning: 1,
-                readability: 1,
-                hallucination: 1,
-              },
-            },
-            {
-              text: "Anonymized text",
-              privacy: {
-                age: {
-                  value: ["25-34"],
-                  score: [1],
-                  confidence: 0.8,
-                },
-              },
-              utility: {
-                meaning: 0.8,
-                readability: 0.9,
-                hallucination: 1,
-              },
-            },
-          ]
-        }]);
-      }, 500);
+    if (!running) return;
+    if (originalTexts.some(text => !text.text)) {
+      alert("Please fill in all editable texts before running.");
+      setRunning(false);
+      return;
     }
-  }, [running]);
+    (async () => {
+      const results = originalTexts.map(({ id, text, context }) => ({
+        id,
+        context,
+        texts: [{ text }],
+      }));
+      const newResults = await getResults({ results, apiKey });
+      setResults(newResults);
+      setRunning(false);
+    })();
+  }, [running, apiKey, originalTexts]);
 
   return (
     <>
@@ -200,7 +170,7 @@ function App() {
           </Listbox>
           <TabGroup className="space-y-2">
             <TabPanels>
-              {originalTexts.map(({ id, editable, noneditable }) => (
+              {originalTexts.map(({ id, text: editable, context: noneditable }) => (
                 <TabPanel key={id}>
                   <Fieldset className="space-y-2">
                     {originalTextMethod === "Multi turn" && <Field>
@@ -214,7 +184,7 @@ function App() {
                         value={noneditable}
                         onChange={(e) => {
                           setOriginalTexts((prev) => prev.map((text) =>
-                            text.id === id ? { ...text, noneditable: e.target.value } : text
+                            text.id === id ? { ...text, context: e.target.value } : text
                           ));
                         }}
                       />
@@ -230,7 +200,7 @@ function App() {
                         value={editable}
                         onChange={(e) => {
                           setOriginalTexts((prev) => prev.map((text) =>
-                            text.id === id ? { ...text, editable: e.target.value } : text
+                            text.id === id ? { ...text, text: e.target.value } : text
                           ));
                         }}
                         required
@@ -264,7 +234,7 @@ function App() {
                     <button className="group flex w-full items-center gap-2 rounded-lg px-3 py-1.5 data-focus:bg-white/10" onClick={() => {
                       setOriginalTexts((prev) => [
                         ...prev,
-                        { id: crypto.randomUUID(), editable: "", noneditable: "" },
+                        { id: crypto.randomUUID(), text: "", context: "" },
                       ]);
                     }}>
                       <PlusIcon className="size-4" />
@@ -397,6 +367,7 @@ function App() {
         </div>
         <div className="sm:col-span-3 space-x-2 flex border-b border-white/5 pb-4">
           <Button className="flex-1 flex justify-center items-center space-x-2 font-medium text-sm bg-white/5 rounded-lg px-4 py-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10" onClick={() => {
+            if (results.length > 0 && !confirm("Results will be cleared. Do you want to continue?")) return;
             if (!apiKey) {
               const newApiKey = prompt("Please enter your OpenAI API key:");
               if (!newApiKey) return alert("API key is required to run.");
@@ -411,6 +382,7 @@ function App() {
           {!running && apiKey && <Button className="flex justify-center items-center space-x-2 font-medium text-sm bg-white/5 rounded-lg px-4 py-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10" onClick={() => {
             const newApiKey = prompt("Please enter your new OpenAI API key:", apiKey || "");
             if (newApiKey === null) return;
+            if (!newApiKey) return localStorage.removeItem("apiKey");
             localStorage.setItem("apiKey", newApiKey);
             dispatchEvent(new Event("storage"));
           }}>
@@ -436,7 +408,7 @@ function App() {
                 <TabPanels>
                   {results.map(({ id, context, texts }) => (
                     <TabPanel key={id} className="space-x-2 flex">
-                      {texts.map((text, index) => (<Fragment key={text.text}>
+                      {texts.map((text, index) => (<Fragment key={index}>
                         <Fieldset className="space-y-2 flex-1">
                           {context && <Field>
                             <Textarea
@@ -474,7 +446,7 @@ function App() {
                             {Object.entries(text.utility).map(([key, value]) => (
                               <div className="flex items-center py-2 space-x-4" key={key}>
                                 <dt className="font-medium">{key}</dt>
-                                <dd className="text-right flex-1 text-neutral-200/50">{value}</dd>
+                                <dd className="text-right flex-1 text-neutral-200/50">{value.score}</dd>
                               </div>
                             ))}
                           </dl>
@@ -547,7 +519,7 @@ function App() {
             </div>
           </>
         )}
-      </div>
+      </div >
       <Dialog open={isOpen} as="div" className="relative z-10 focus:outline-none" onClose={() => setIsOpen(false)}>
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
@@ -558,7 +530,7 @@ function App() {
               <DialogTitle as="h3" className="text-base/7 font-medium">
                 Original texts
               </DialogTitle>
-              {originalTexts.map(({ id, editable, noneditable }, index) => (
+              {originalTexts.map(({ id, text: editable, context: noneditable }, index) => (
                 <Fieldset className="space-y-2" key={id}>
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm font-medium">Text {index + 1}</h4>
@@ -583,7 +555,7 @@ function App() {
                       value={noneditable}
                       onChange={(e) => {
                         setOriginalTexts((prev) => prev.map((text) =>
-                          text.id === id ? { ...text, noneditable: e.target.value } : text
+                          text.id === id ? { ...text, context: e.target.value } : text
                         ));
                       }}
                     />
@@ -599,7 +571,7 @@ function App() {
                       value={editable}
                       onChange={(e) => {
                         setOriginalTexts((prev) => prev.map((text) =>
-                          text.id === id ? { ...text, editable: e.target.value } : text
+                          text.id === id ? { ...text, text: e.target.value } : text
                         ));
                       }}
                       required
@@ -610,8 +582,8 @@ function App() {
               <div className="flex justify-end space-x-2">
                 <Button className="flex items-center space-x-2 font-medium text-sm bg-white/5 rounded-lg px-4 p-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/10" onClick={() => {
                   const jsonlData = originalTexts.map(text => JSON.stringify({
-                    editable: text.editable,
-                    noneditable: text.noneditable,
+                    editable: text.text,
+                    noneditable: text.context,
                   })).join("\n");
                   downloadFile("original_texts.jsonl", jsonlData);
                 }}>
