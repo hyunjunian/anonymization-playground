@@ -503,11 +503,11 @@ function App() {
               <dl className="divide-y divide-white/10 text-sm/6 tabular-nums">
                 <div className="flex items-center py-2 space-x-2 font-medium">
                   <dt className="flex-1">Privacy</dt>
-                  {/* <dd className="text-neutral-200/50 text-sm/6">1</dd>
+                  <dd className="text-neutral-200/50 text-sm/6">1</dd>
                   <ArrowRightIcon className="text-neutral-200/50 size-4" />
-                  <dd className="text-neutral-200/50 text-sm/6">0.4</dd> */}
+                  <dd className="text-neutral-200/50 text-sm/6">{evaluationResults.total.sum / evaluationResults.total.count}</dd>
                 </div>
-                {Object.entries(evaluationResults).map(([key, { sum, count }]) => count ? (
+                {Object.entries(evaluationResults).map(([key, { sum, count }]) => key !== "total" && count ? (
                   <div className="flex items-center py-2 pl-4 space-x-2 text-sm/6" key={key}>
                     <dt className="flex-1">{key}</dt>
                     <dd className="text-neutral-200/50">1</dd>
