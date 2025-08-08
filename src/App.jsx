@@ -1,7 +1,7 @@
 import { Button, CloseButton, Dialog, DialogPanel, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel, Field, Fieldset, Label, Listbox, ListboxButton, ListboxOption, ListboxOptions, Menu, MenuButton, MenuItem, MenuItems, Popover, PopoverButton, PopoverPanel, Switch, Tab, TabGroup, TabList, TabPanel, TabPanels, Textarea } from "@headlessui/react";
 import { ArrowDownTrayIcon, ArrowPathIcon, ArrowRightIcon, ArrowsPointingOutIcon, ArrowUpTrayIcon, CheckIcon, ChevronDownIcon, InformationCircleIcon, KeyIcon, PlayIcon, PlusIcon, SparklesIcon, TrashIcon } from "@heroicons/react/16/solid";
 import clsx from "clsx";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
 import { downloadFile } from "./utils.js";
 
 const INFO = {
@@ -59,6 +59,7 @@ function App() {
     noneditable: "",
   }]);
   const [running, setRunning] = useState(false);
+  const [results, setResults] = useState([]);
 
   useEffect(() => {
     if (originalTexts.some(text => text.editable || text.noneditable)) {
@@ -77,7 +78,48 @@ function App() {
     if (running) {
       setTimeout(() => {
         setRunning(false);
-      }, 2000);
+        setResults([{
+          id: crypto.randomUUID(),
+          context: "Non-editable text",
+          texts: [
+            {
+              text: "Original text",
+              privacy: {
+                age: {
+                  value: ["25-34"],
+                  score: [1],
+                  confidence: 0.8,
+                },
+                location: {
+                  value: ["New York, NY"],
+                  score: [1],
+                  confidence: 0.8,
+                },
+              },
+              utility: {
+                meaning: 1,
+                readability: 1,
+                hallucination: 1,
+              },
+            },
+            {
+              text: "Anonymized text",
+              privacy: {
+                age: {
+                  value: ["25-34"],
+                  score: [1],
+                  confidence: 0.8,
+                },
+              },
+              utility: {
+                meaning: 0.8,
+                readability: 0.9,
+                hallucination: 1,
+              },
+            },
+          ]
+        }]);
+      }, 500);
     }
   }, [running]);
 
@@ -376,117 +418,135 @@ function App() {
             <span>Change API key</span>
           </Button>}
         </div>
-        <div className="sm:col-span-2 space-y-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-medium">Result</h2>
-            <Button className="flex justify-center items-center space-x-2 font-medium text-sm rounded-lg p-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/5" onClick={() => {
-            }}>
-              <ArrowDownTrayIcon className="size-4" />
-            </Button>
-          </div>
-          <TabGroup className="space-y-2">
-            <TabPanels>
-              {originalTexts.map(({ id, editable, noneditable }) => (
-                <TabPanel key={id}>
-                  <div className="space-x-2 flex items-center">
-                    <Fieldset className="space-y-2 flex-1">
-                      {noneditable && <Field>
-                        <Textarea
-                          className={clsx(
-                            'block w-full resize-none rounded-lg border-none bg-white/5 px-3 py-1.5 text-sm/6',
-                            'focus:not-data-focus:outline-none data-focus:outline-2 data-focus:-outline-offset-2 data-focus:outline-white/25'
-                          )}
-                          rows={6}
-                          value={noneditable}
-                          disabled
-                        />
-                      </Field>}
-                      <Field>
-                        <Textarea
-                          className={clsx(
-                            'block w-full resize-none rounded-lg border-none bg-white/5 px-3 py-1.5 text-sm/6',
-                            'focus:not-data-focus:outline-none data-focus:outline-2 data-focus:-outline-offset-2 data-focus:outline-white/25'
-                          )}
-                          rows={3}
-                          value={editable}
-                          disabled
-                          required
-                        />
-                      </Field>
-                    </Fieldset>
-                    <ArrowRightIcon className="size-4" />
-                    <Fieldset className="space-y-2 flex-1">
-                      {noneditable && <Field>
-                        <Textarea
-                          className={clsx(
-                            'block w-full resize-none rounded-lg border-none bg-white/5 px-3 py-1.5 text-sm/6',
-                            'focus:not-data-focus:outline-none data-focus:outline-2 data-focus:-outline-offset-2 data-focus:outline-white/25'
-                          )}
-                          rows={6}
-                          value={noneditable}
-                          disabled
-                        />
-                      </Field>}
-                      <Field>
-                        <Textarea
-                          className={clsx(
-                            'block w-full resize-none rounded-lg border-none bg-white/5 px-3 py-1.5 text-sm/6',
-                            'focus:not-data-focus:outline-none data-focus:outline-2 data-focus:-outline-offset-2 data-focus:outline-white/25'
-                          )}
-                          rows={3}
-                          value={editable}
-                          disabled
-                          required
-                        />
-                      </Field>
-                    </Fieldset>
-                  </div>
-                </TabPanel>
-              ))}
-            </TabPanels>
-            <TabList className="flex flex-1 overflow-x-auto">
-              {originalTexts.map(({ id }, index) => (
-                <Tab
-                  className="rounded-lg px-3 py-1 text-sm/6 font-medium focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/5 data-selected:bg-white/10 data-selected:data-hover:bg-white/10"
-                  key={id}
-                >
-                  {index + 1}
-                </Tab>
-              ))}
-            </TabList>
-          </TabGroup>
-        </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-medium">Evaluation result</h2>
-            <Button className="flex justify-center items-center space-x-2 font-medium text-sm rounded-lg p-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/5" onClick={() => {
-            }}>
-              <ArrowDownTrayIcon className="size-4" />
-            </Button>
-          </div>
-          <div className="divide-y divide-white/5 rounded-lg bg-white/5">
-            <Disclosure as="div" className="p-4" defaultOpen>
-              <DisclosureButton className="group flex w-full items-center justify-between">
-                <span className="text-sm/6 font-medium group-data-hover:text-neutral-200/80">
-                  Privacy evaluation
-                </span>
-                <ChevronDownIcon className="size-5 fill-white/60 group-data-hover:fill-white/50 group-data-open:rotate-180" />
-              </DisclosureButton>
-              <DisclosurePanel className="mt-2 text-sm/5 text-neutral-200/50">
-                If you're unhappy with your purchase, we'll refund you in full.
-              </DisclosurePanel>
-            </Disclosure>
-            <Disclosure as="div" className="p-4" defaultOpen>
-              <DisclosureButton className="group flex w-full items-center justify-between">
-                <span className="text-sm/6 font-medium group-data-hover:text-neutral-200/80">
-                  Utility evaluation
-                </span>
-                <ChevronDownIcon className="size-5 fill-white/60 group-data-hover:fill-white/50 group-data-open:rotate-180" />
-              </DisclosureButton>
-              <DisclosurePanel className="mt-2 text-sm/5 text-neutral-200/50">No.</DisclosurePanel>
-            </Disclosure>
-          </div>
-        </div>
+        {results.length > 0 && (
+          <>
+            <div className="sm:col-span-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-medium">Result</h2>
+                <Button className="flex justify-center items-center space-x-2 font-medium text-sm rounded-lg p-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/5" onClick={() => {
+                  downloadFile("results.jsonl", results.map((result) => {
+                    delete result.id;
+                    return JSON.stringify(result);
+                  }).join("\n"));
+                }}>
+                  <ArrowDownTrayIcon className="size-4" />
+                </Button>
+              </div>
+              <TabGroup className="space-y-2">
+                <TabPanels>
+                  {results.map(({ id, context, texts }) => (
+                    <TabPanel key={id} className="space-x-2 flex">
+                      {texts.map((text, index) => (<Fragment key={text.text}>
+                        <Fieldset className="space-y-2 flex-1">
+                          {context && <Field>
+                            <Textarea
+                              className={clsx(
+                                'block w-full resize-none rounded-lg border-none bg-white/5 px-3 py-1.5 text-sm/6',
+                                'focus:not-data-focus:outline-none data-focus:outline-2 data-focus:-outline-offset-2 data-focus:outline-white/25'
+                              )}
+                              rows={6}
+                              value={context}
+                              disabled
+                            />
+                          </Field>}
+                          <Field>
+                            <Textarea
+                              className={clsx(
+                                'block w-full resize-none rounded-lg border-none bg-white/5 px-3 py-1.5 text-sm/6',
+                                'focus:not-data-focus:outline-none data-focus:outline-2 data-focus:-outline-offset-2 data-focus:outline-white/25'
+                              )}
+                              rows={3}
+                              value={text.text}
+                              disabled
+                              required
+                            />
+                          </Field>
+                          <dl className="divide-y divide-white/10 text-sm/6 tabular-nums">
+                            {Object.entries(text.privacy).map(([key, value]) => (
+                              <div className="flex items-center py-2 space-x-4" key={key}>
+                                <dt className="font-medium">{key}</dt>
+                                <dd className="text-right flex-1 text-neutral-200/50">{value.value[0]}</dd>
+                                <dd className="text-neutral-200/50">{value.confidence}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                          <dl className="divide-y divide-white/10 text-sm/6 tabular-nums">
+                            {Object.entries(text.utility).map(([key, value]) => (
+                              <div className="flex items-center py-2 space-x-4" key={key}>
+                                <dt className="font-medium">{key}</dt>
+                                <dd className="text-right flex-1 text-neutral-200/50">{value}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </Fieldset>
+                        {index !== texts.length - 1 && <ArrowRightIcon className="size-4 mt-4" />}
+                      </Fragment>))}
+                    </TabPanel>
+                  ))}
+                </TabPanels>
+                <TabList className="flex flex-1 overflow-x-auto">
+                  {originalTexts.map(({ id }, index) => (
+                    <Tab
+                      className="rounded-lg px-3 py-1 text-sm/6 font-medium focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/5 data-selected:bg-white/10 data-selected:data-hover:bg-white/10"
+                      key={id}
+                    >
+                      {index + 1}
+                    </Tab>
+                  ))}
+                </TabList>
+              </TabGroup>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-medium">Evaluation result</h2>
+                <Button className="flex justify-center items-center space-x-2 font-medium text-sm rounded-lg p-2 focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white/25 data-hover:bg-white/5" onClick={() => {
+                }}>
+                  <ArrowDownTrayIcon className="size-4" />
+                </Button>
+              </div>
+              <dl className="divide-y divide-white/10 text-sm/6 tabular-nums">
+                <div className="flex items-center py-2 space-x-2 font-medium">
+                  <dt className="flex-1">Privacy</dt>
+                  <dd className="text-neutral-200/50 text-sm/6">1</dd>
+                  <ArrowRightIcon className="text-neutral-200/50 size-4" />
+                  <dd className="text-neutral-200/50 text-sm/6">0.4</dd>
+                </div>
+                <div className="flex items-center py-2 pl-4 space-x-2 text-sm/6">
+                  <dt className="flex-1">age</dt>
+                  <dd className="text-neutral-200/50">1</dd>
+                  <ArrowRightIcon className="text-neutral-200/50 size-4" />
+                  <dd className="text-neutral-200/50">0.5</dd>
+                </div>
+                <div className="flex items-center py-2 pl-4 space-x-2 text-sm/6">
+                  <dt className="flex-1">age</dt>
+                  <dd className="text-neutral-200/50">1</dd>
+                  <ArrowRightIcon className="text-neutral-200/50 size-4" />
+                  <dd className="text-neutral-200/50">0.5</dd>
+                </div>
+              </dl>
+              <dl className="divide-y divide-white/10 text-sm/6 tabular-nums">
+                <div className="flex items-center py-2 space-x-2 font-medium">
+                  <dt className="flex-1">Utility</dt>
+                  <dd className="text-neutral-200/50 text-sm/6">1</dd>
+                  <ArrowRightIcon className="text-neutral-200/50 size-4" />
+                  <dd className="text-neutral-200/50 text-sm/6">0.4</dd>
+                </div>
+                <div className="flex items-center py-2 pl-4 space-x-2 text-sm/6">
+                  <dt className="flex-1">readability</dt>
+                  <dd className="text-neutral-200/50">1</dd>
+                  <ArrowRightIcon className="text-neutral-200/50 size-4" />
+                  <dd className="text-neutral-200/50">0.5</dd>
+                </div>
+                <div className="flex items-center py-2 pl-4 space-x-2 text-sm/6">
+                  <dt className="flex-1">meaning</dt>
+                  <dd className="text-neutral-200/50">1</dd>
+                  <ArrowRightIcon className="text-neutral-200/50 size-4" />
+                  <dd className="text-neutral-200/50">0.5</dd>
+                </div>
+              </dl>
+            </div>
+          </>
+        )}
       </div>
       <Dialog open={isOpen} as="div" className="relative z-10 focus:outline-none" onClose={() => setIsOpen(false)}>
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
