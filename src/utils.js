@@ -9,7 +9,7 @@ function downloadFile(filename, content) {
     URL.revokeObjectURL(link.href);
 }
 
-async function getResponse({ apiKey, input, instruction = "", model = "gpt-5-mini", text, max_output_tokens = 2048 }) {
+async function getResponse({ apiKey, input, instruction = "", model = "gpt-5-mini", text, max_output_tokens = 4096 }) {
     if (!apiKey) return console.error("API key is required.");
     if (!input) return console.error("Input is required.");
     const res = await fetch(`https://api.openai.com/v1/responses`, {
